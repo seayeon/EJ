@@ -1,146 +1,301 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#111827">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="근태 기록">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
-<title>근태 기록</title>
-<style>
-:root{color-scheme:dark;--bg:#0b1020;--card:#151d31;--muted:#9aa7bd;--line:#28334a;--green:#49d49a;--white:#f5f7fb}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#1a2945 0,#0b1020 58%);color:var(--white);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:flex;justify-content:center;padding:env(safe-area-inset-top) 18px env(safe-area-inset-bottom)}
-main{width:100%;max-width:480px;padding:34px 0 28px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}.brand{font-size:15px;font-weight:700;letter-spacing:.04em}.today{font-size:12px;color:var(--muted);text-align:right}
-.panel{background:linear-gradient(145deg,rgba(29,41,65,.96),rgba(19,28,47,.96));border:1px solid var(--line);border-radius:26px;padding:26px 22px;box-shadow:0 18px 55px #0005}
-.eyebrow{color:var(--muted);font-size:12px;letter-spacing:.12em;font-weight:700}.timer{font-size:clamp(46px,13vw,64px);font-weight:750;letter-spacing:-.055em;font-variant-numeric:tabular-nums;margin:12px 0 4px}.sub{font-size:13px;color:var(--muted)}
-.status{display:inline-flex;align-items:center;gap:7px;margin-top:19px;border:1px solid #326a5a;background:#153b33;color:#8cf0c3;border-radius:99px;padding:8px 12px;font-size:12px;font-weight:700}.dot{width:7px;height:7px;background:var(--green);border-radius:50%;box-shadow:0 0 12px var(--green)}
-.details{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.detail{background:#0e1729;border:1px solid var(--line);border-radius:17px;padding:16px}.label{font-size:12px;color:var(--muted);margin-bottom:9px}.value{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
-button{width:100%;border:0;border-radius:15px;padding:17px;margin-top:13px;background:var(--green);color:#06271c;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 9px 24px #49d49a30}button:disabled{background:#344258;color:#9aa7bd;box-shadow:none;cursor:default}
-button.secondary{background:#26344d;color:#e7edf8;border:1px solid #3b4b67;box-shadow:none}
-.editor{display:none;margin-top:16px;padding:16px;background:#0e1729;border:1px solid var(--line);border-radius:17px}.editor.open{display:block}.editor label{display:block;color:var(--muted);font-size:12px;margin-bottom:9px}
-input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px solid #40506a;background:#18243a;color:#fff;font:700 20px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center}
-.time-parts{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.time-parts label{display:block;color:var(--muted);font-size:12px;margin-bottom:7px}
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.actions button{margin-top:12px}
-.note{font-size:12px;line-height:1.65;color:var(--muted);margin:18px 3px 0}.foot{text-align:center;color:#66748c;font-size:11px;margin-top:25px}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>개인 근태 기록</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 18px;
+      background: #111827;
+      color: #f9fafb;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .container {
+      max-width: 430px;
+      margin: 30px auto;
+    }
+    h1 { font-size: 25px; }
+    .card {
+      background: #1f2937;
+      border-radius: 18px;
+      padding: 22px;
+      margin: 18px 0;
+    }
+    .label {
+      color: #9ca3af;
+      font-size: 14px;
+    }
+    .time {
+      font-size: 36px;
+      font-weight: bold;
+      margin: 12px 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .weekly {
+      font-size: 32px;
+      color: #60a5fa;
+      font-weight: bold;
+      margin-top: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    button {
+      width: 100%;
+      padding: 16px;
+      border: 0;
+      border-radius: 12px;
+      background: #2563eb;
+      color: white;
+      font-size: 17px;
+      font-weight: bold;
+      margin-top: 12px;
+    }
+    button.secondary { background: #374151; }
+    input {
+      width: 100%;
+      padding: 13px;
+      margin-top: 8px;
+      border: 1px solid #4b5563;
+      border-radius: 10px;
+      background: #111827;
+      color: white;
+      font-size: 18px;
+    }
+    .inputs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .inputs label {
+      color: #9ca3af;
+      font-size: 13px;
+    }
+    .small {
+      color: #9ca3af;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+  </style>
 </head>
 <body>
-<main>
-  <div class="top"><div class="brand">◷ &nbsp;근태 기록</div><div class="today" id="dateLabel">오늘</div></div>
-  <section class="panel">
-    <div class="eyebrow">TODAY'S WORK TIME</div>
-    <div class="timer" id="timer">00:00:00</div>
-    <div class="sub">오늘 누적 근무 시간</div>
-    <div class="status" id="status">출근 전</div>
-    <div class="details">
-      <div class="detail"><div class="label">출근 시간</div><div class="value" id="clockIn">--:--:--</div></div>
-      <div class="detail"><div class="label">현재 시각</div><div class="value" id="now">--:--:--</div></div>
+<div class="container">
+  <h1>근태 기록</h1>
+  <div class="small" id="today"></div>
+
+  <div class="card">
+    <div class="label">오늘 출근 시간</div>
+    <div class="time" id="clockIn">미기록</div>
+    <div class="label">오늘 근무 경과 시간</div>
+    <div class="time" id="elapsed">00:00:00</div>
+    <button onclick="recordClockIn()">현재 시간으로 출근 기록</button>
+  </div>
+
+  <div class="card">
+    <div class="label">이번 주 누적 시간</div>
+    <div class="weekly" id="weekly">00:00:00</div>
+    <div class="small">월요일부터 오늘까지의 출근 경과 시간 합계</div>
+  </div>
+
+  <div class="card">
+    <div class="label">출근 시간 직접 수정</div>
+    <div class="inputs">
+      <label>시
+        <input id="hour" type="number" min="0" max="23" placeholder="시">
+      </label>
+      <label>분
+        <input id="minute" type="number" min="0" max="59" placeholder="분">
+      </label>
+      <label>초
+        <input id="second" type="number" min="0" max="59" placeholder="초">
+      </label>
     </div>
-    <button id="clockButton">현재 시간으로 출근 기록</button>
-    <button class="secondary" id="editToggle">출근 시간 직접 입력 / 수정</button>
-    <div class="editor" id="editor">
-      <label>출근 시간 직접 설정</label>
-      <div class="time-parts">
-        <div><label for="hourInput">시</label><input id="hourInput" type="number" min="0" max="23" inputmode="numeric" placeholder="09"></div>
-        <div><label for="minuteInput">분</label><input id="minuteInput" type="number" min="0" max="59" inputmode="numeric" placeholder="00"></div>
-        <div><label for="secondInput">초</label><input id="secondInput" type="number" min="0" max="59" inputmode="numeric" placeholder="00"></div>
-      </div>
-      <div class="actions">
-        <button class="secondary" id="cancelEdit">취소</button>
-        <button id="saveEdit">시간 저장</button>
-      </div>
-    </div>
-  </section>
-  <p class="note">출근 버튼을 누르면 현재 시각이 저장됩니다. 직접 입력하거나 기록된 시간을 수정할 수도 있습니다. 날짜가 바뀌면 전날 기록은 자동으로 삭제됩니다. 기록은 이 기기의 브라우저에만 저장됩니다.</p>
-  <div class="foot">개인용 근태 기록 · 이 기기에서만 사용</div>
-</main>
+    <button class="secondary" onclick="saveManualTime()">수정 시간 저장</button>
+  </div>
+</div>
+
 <script>
-(() => {
-  const KEY = "personal-attendance-v1";
-  const $ = id => document.getElementById(id);
-  let record = null;
-  function dayKey(d = new Date()) {
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const DAILY_KEY = "personal-attendance-v1";
+const WEEKLY_KEY = "personal-attendance-weekly-v1";
+
+function dateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function mondayKey(date) {
+  const monday = new Date(date);
+  const day = monday.getDay();
+  monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0, 0, 0, 0);
+  return dateKey(monday);
+}
+
+function formatTime(seconds) {
+  seconds = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return [h, m, s].map(v => String(v).padStart(2, "0")).join(":");
+}
+
+function loadDaily() {
+  const today = dateKey(new Date());
+  let data;
+
+  try {
+    data = JSON.parse(localStorage.getItem(DAILY_KEY));
+  } catch {
+    data = null;
   }
-  function loadForToday() {
-    const today = dayKey();
-    try {
-      const saved = JSON.parse(localStorage.getItem(KEY) || "null");
-      if (saved && saved.date === today && Number.isFinite(saved.clockIn)) record = saved;
-      else { record = null; localStorage.removeItem(KEY); }
-    } catch { record = null; localStorage.removeItem(KEY); }
+
+  if (!data || data.date !== today) {
+    localStorage.removeItem(DAILY_KEY);
+    return null;
   }
-  function fmtTime(d) {
-    return [d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,"0")).join(":");
+
+  return data;
+}
+
+function saveDaily(clockIn) {
+  const data = {
+    date: dateKey(new Date()),
+    clockIn: clockIn
+  };
+  localStorage.setItem(DAILY_KEY, JSON.stringify(data));
+}
+
+function loadWeekly() {
+  const key = mondayKey(new Date());
+  let data;
+
+  try {
+    data = JSON.parse(localStorage.getItem(WEEKLY_KEY));
+  } catch {
+    data = null;
   }
-  function fmtDuration(ms) {
-    const sec = Math.max(0,Math.floor(ms/1000));
-    const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
-    return [h,m,s].map(n=>String(n).padStart(2,"0")).join(":");
+
+  if (!data || data.week !== key) {
+    data = { week: key, days: {} };
+    localStorage.setItem(WEEKLY_KEY, JSON.stringify(data));
   }
-  function render() {
-    const now = new Date();
-    if (record && record.date !== dayKey(now)) { localStorage.removeItem(KEY); record = null; }
-    $("dateLabel").textContent = new Intl.DateTimeFormat("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(now);
-    $("now").textContent = fmtTime(now);
-    if (record) {
-      $("timer").textContent = fmtDuration(now.getTime()-record.clockIn);
-      $("clockIn").textContent = fmtTime(new Date(record.clockIn));
-      $("status").innerHTML = '<span class="dot"></span> 근무 중';
-      $("clockButton").textContent = "현재 시간으로 다시 기록";
-    } else {
-      $("timer").textContent = "00:00:00";
-      $("clockIn").textContent = "--:--:--";
-      $("status").textContent = "출근 전";
-      $("clockButton").textContent = "현재 시간으로 출근 기록";
-    }
-  }
-  function saveTimestamp(timestamp) {
-    record = {date:dayKey(),clockIn:timestamp};
-    localStorage.setItem(KEY,JSON.stringify(record));
-    render();
-  }
-  $("clockButton").addEventListener("click", () => saveTimestamp(Date.now()));
-  $("editToggle").addEventListener("click", () => {
-    const editor = $("editor");
-    if (!editor.classList.contains("open")) {
-      const selected = record ? new Date(record.clockIn) : new Date();
-      $("hourInput").value = String(selected.getHours()).padStart(2,"0");
-      $("minuteInput").value = String(selected.getMinutes()).padStart(2,"0");
-      $("secondInput").value = String(selected.getSeconds()).padStart(2,"0");
-      editor.classList.add("open");
-    } else editor.classList.remove("open");
-  });
-  $("cancelEdit").addEventListener("click", () => $("editor").classList.remove("open"));
-  $("saveEdit").addEventListener("click", () => {
-    const h = Number($("hourInput").value);
-    const m = Number($("minuteInput").value);
-    const s = Number($("secondInput").value);
-    if ($("hourInput").value === "" || $("minuteInput").value === "" || $("secondInput").value === "" ||
-        !Number.isInteger(h) || !Number.isInteger(m) || !Number.isInteger(s) ||
-        h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) {
-      alert("시(0~23), 분(0~59), 초(0~59)를 올바르게 입력해 주세요."); return;
-    }
-    const now = new Date();
-    const timestamp = new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,m,s,0).getTime();
-    if (timestamp > Date.now()) {
-      if (!confirm("현재 시각보다 늦은 시간입니다. 이 시간으로 저장할까요?")) return;
-    }
-    saveTimestamp(timestamp);
-    $("editor").classList.remove("open");
-  });
-  loadForToday();
+
+  return data;
+}
+
+function recordClockIn() {
+  const now = new Date();
+  saveDaily(now.getTime());
   render();
-  setInterval(render,250);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadForToday(); render(); } });
-  window.addEventListener("pageshow", () => { loadForToday(); render(); });
-  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+}
+
+function saveManualTime() {
+  const h = Number(document.getElementById("hour").value);
+  const m = Number(document.getElementById("minute").value);
+  const s = Number(document.getElementById("second").value);
+
+  if (
+    document.getElementById("hour").value === "" ||
+    document.getElementById("minute").value === "" ||
+    document.getElementById("second").value === "" ||
+    !Number.isInteger(h) || !Number.isInteger(m) ||
+    !Number.isInteger(s) ||
+    h < 0 || h > 23 || m < 0 || m > 59 ||
+    s < 0 || s > 59
+  ) {
+    alert("시, 분, 초를 올바르게 입력해 주세요.");
+    return;
   }
-})();
+
+  const now = new Date();
+  const clockIn = new Date(
+    now.getFullYear(), now.getMonth(), now.getDate(),
+    h, m, s
+  );
+
+  if (clockIn.getTime() > now.getTime()) {
+    if (!confirm("현재 시간보다 미래입니다. 저장할까요?")) return;
+  }
+
+  saveDaily(clockIn.getTime());
+  render();
+  alert("출근 시간이 수정되었습니다.");
+}
+
+function render() {
+  const now = new Date();
+  document.getElementById("today").textContent =
+    now.getFullYear() + "년 " +
+    (now.getMonth() + 1) + "월 " +
+    now.getDate() + "일";
+
+  const daily = loadDaily();
+  let elapsed = 0;
+
+  if (daily) {
+    const start = Number(daily.clockIn);
+    document.getElementById("clockIn").textContent =
+      new Date(start).toLocaleTimeString("ko-KR", {
+        hour12: false
+      });
+
+    elapsed = Math.max(0, Math.floor((now.getTime() - start) / 1000));
+    document.getElementById("elapsed").textContent =
+      formatTime(elapsed);
+
+    const startDate = new Date(start);
+    document.getElementById("hour").value = startDate.getHours();
+    document.getElementById("minute").value = startDate.getMinutes();
+    document.getElementById("second").value = startDate.getSeconds();
+  } else {
+    document.getElementById("clockIn").textContent = "미기록";
+    document.getElementById("elapsed").textContent = "00:00:00";
+  }
+
+  const weekly = loadWeekly();
+  const todayKey = dateKey(now);
+
+  // 오늘 경과 시간은 실시간으로 계산
+  // 지난 날짜의 기록은 저장된 일별 초를 사용
+  weekly.days[todayKey] = elapsed;
+
+  // 이번 주 월요일 이전의 데이터 제거
+  const weekStart = mondayKey(now);
+  for (const key of Object.keys(weekly.days)) {
+    if (key < weekStart || key > todayKey) {
+      delete weekly.days[key];
+    }
+  }
+
+  localStorage.setItem(WEEKLY_KEY, JSON.stringify(weekly));
+
+  const total = Object.values(weekly.days)
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+
+  document.getElementById("weekly").textContent =
+    formatTime(total);
+}
+
+render();
+setInterval(render, 1000);
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) render();
+});
+
+window.addEventListener("pageshow", render);
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(console.error);
+  });
+}
 </script>
 </body>
 </html>
