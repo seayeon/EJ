@@ -21,7 +21,8 @@ main{width:100%;max-width:480px;padding:34px 0 28px}.top{display:flex;justify-co
 button{width:100%;border:0;border-radius:15px;padding:17px;margin-top:13px;background:var(--green);color:#06271c;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 9px 24px #49d49a30}button:disabled{background:#344258;color:#9aa7bd;box-shadow:none;cursor:default}
 button.secondary{background:#26344d;color:#e7edf8;border:1px solid #3b4b67;box-shadow:none}
 .editor{display:none;margin-top:16px;padding:16px;background:#0e1729;border:1px solid var(--line);border-radius:17px}.editor.open{display:block}.editor label{display:block;color:var(--muted);font-size:12px;margin-bottom:9px}
-input[type=time]{width:100%;padding:14px;border-radius:12px;border:1px solid #40506a;background:#18243a;color:#fff;font:700 19px -apple-system,BlinkMacSystemFont,sans-serif;color-scheme:dark}
+input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px solid #40506a;background:#18243a;color:#fff;font:700 20px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center}
+.time-parts{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.time-parts label{display:block;color:var(--muted);font-size:12px;margin-bottom:7px}
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.actions button{margin-top:12px}
 .note{font-size:12px;line-height:1.65;color:var(--muted);margin:18px 3px 0}.foot{text-align:center;color:#66748c;font-size:11px;margin-top:25px}
 </style>
@@ -41,8 +42,12 @@ input[type=time]{width:100%;padding:14px;border-radius:12px;border:1px solid #40
     <button id="clockButton">현재 시간으로 출근 기록</button>
     <button class="secondary" id="editToggle">출근 시간 직접 입력 / 수정</button>
     <div class="editor" id="editor">
-      <label for="manualTime">출근 시간 선택</label>
-      <input id="manualTime" type="time" step="1">
+      <label>출근 시간 직접 설정</label>
+      <div class="time-parts">
+        <div><label for="hourInput">시</label><input id="hourInput" type="number" min="0" max="23" inputmode="numeric" placeholder="09"></div>
+        <div><label for="minuteInput">분</label><input id="minuteInput" type="number" min="0" max="59" inputmode="numeric" placeholder="00"></div>
+        <div><label for="secondInput">초</label><input id="secondInput" type="number" min="0" max="59" inputmode="numeric" placeholder="00"></div>
+      </div>
       <div class="actions">
         <button class="secondary" id="cancelEdit">취소</button>
         <button id="saveEdit">시간 저장</button>
@@ -76,9 +81,6 @@ input[type=time]{width:100%;padding:14px;border-radius:12px;border:1px solid #40
     const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
     return [h,m,s].map(n=>String(n).padStart(2,"0")).join(":");
   }
-  function toInputTime(d) {
-    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
-  }
   function render() {
     const now = new Date();
     if (record && record.date !== dayKey(now)) { localStorage.removeItem(KEY); record = null; }
@@ -105,15 +107,23 @@ input[type=time]{width:100%;padding:14px;border-radius:12px;border:1px solid #40
   $("editToggle").addEventListener("click", () => {
     const editor = $("editor");
     if (!editor.classList.contains("open")) {
-      $("manualTime").value = record ? toInputTime(new Date(record.clockIn)) : toInputTime(new Date());
+      const selected = record ? new Date(record.clockIn) : new Date();
+      $("hourInput").value = String(selected.getHours()).padStart(2,"0");
+      $("minuteInput").value = String(selected.getMinutes()).padStart(2,"0");
+      $("secondInput").value = String(selected.getSeconds()).padStart(2,"0");
       editor.classList.add("open");
     } else editor.classList.remove("open");
   });
   $("cancelEdit").addEventListener("click", () => $("editor").classList.remove("open"));
   $("saveEdit").addEventListener("click", () => {
-    const value = $("manualTime").value;
-    if (!value) { alert("출근 시간을 선택해 주세요."); return; }
-    const [h,m,s="0"] = value.split(":").map(Number);
+    const h = Number($("hourInput").value);
+    const m = Number($("minuteInput").value);
+    const s = Number($("secondInput").value);
+    if ($("hourInput").value === "" || $("minuteInput").value === "" || $("secondInput").value === "" ||
+        !Number.isInteger(h) || !Number.isInteger(m) || !Number.isInteger(s) ||
+        h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) {
+      alert("시(0~23), 분(0~59), 초(0~59)를 올바르게 입력해 주세요."); return;
+    }
     const now = new Date();
     const timestamp = new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,m,s,0).getTime();
     if (timestamp > Date.now()) {
