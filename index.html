@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="근태 기록">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>근태 기록</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--card:#151d31;--muted:#9aa7bd;--line:#28334a;--green:#49d49a;--white:#f5f7fb}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#1a2945 0,#0b1020 58%);color:var(--white);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:flex;justify-content:center;padding:env(safe-area-inset-top) 18px env(safe-area-inset-bottom)}
+main{width:100%;max-width:480px;padding:34px 0 28px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}.brand{font-size:15px;font-weight:700;letter-spacing:.04em}.today{font-size:12px;color:var(--muted);text-align:right}
+.panel{background:linear-gradient(145deg,rgba(29,41,65,.96),rgba(19,28,47,.96));border:1px solid var(--line);border-radius:26px;padding:26px 22px;box-shadow:0 18px 55px #0005}
+.eyebrow{color:var(--muted);font-size:12px;letter-spacing:.12em;font-weight:700}.timer{font-size:clamp(46px,13vw,64px);font-weight:750;letter-spacing:-.055em;font-variant-numeric:tabular-nums;margin:12px 0 4px}.sub{font-size:13px;color:var(--muted)}
+.status{display:inline-flex;align-items:center;gap:7px;margin-top:19px;border:1px solid #326a5a;background:#153b33;color:#8cf0c3;border-radius:99px;padding:8px 12px;font-size:12px;font-weight:700}.dot{width:7px;height:7px;background:var(--green);border-radius:50%;box-shadow:0 0 12px var(--green)}
+.details{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.detail{background:#0e1729;border:1px solid var(--line);border-radius:17px;padding:16px}.label{font-size:12px;color:var(--muted);margin-bottom:9px}.value{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+button{width:100%;border:0;border-radius:15px;padding:17px;margin-top:13px;background:var(--green);color:#06271c;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 9px 24px #49d49a30}button:disabled{background:#344258;color:#9aa7bd;box-shadow:none;cursor:default}
+button.secondary{background:#26344d;color:#e7edf8;border:1px solid #3b4b67;box-shadow:none}
+.editor{display:none;margin-top:16px;padding:16px;background:#0e1729;border:1px solid var(--line);border-radius:17px}.editor.open{display:block}.editor label{display:block;color:var(--muted);font-size:12px;margin-bottom:9px}
+input[type=time]{width:100%;padding:14px;border-radius:12px;border:1px solid #40506a;background:#18243a;color:#fff;font:700 19px -apple-system,BlinkMacSystemFont,sans-serif;color-scheme:dark}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.actions button{margin-top:12px}
+.note{font-size:12px;line-height:1.65;color:var(--muted);margin:18px 3px 0}.foot{text-align:center;color:#66748c;font-size:11px;margin-top:25px}
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><div class="brand">◷ &nbsp;근태 기록</div><div class="today" id="dateLabel">오늘</div></div>
+  <section class="panel">
+    <div class="eyebrow">TODAY'S WORK TIME</div>
+    <div class="timer" id="timer">00:00:00</div>
+    <div class="sub">오늘 누적 근무 시간</div>
+    <div class="status" id="status">출근 전</div>
+    <div class="details">
+      <div class="detail"><div class="label">출근 시간</div><div class="value" id="clockIn">--:--:--</div></div>
+      <div class="detail"><div class="label">현재 시각</div><div class="value" id="now">--:--:--</div></div>
+    </div>
+    <button id="clockButton">현재 시간으로 출근 기록</button>
+    <button class="secondary" id="editToggle">출근 시간 직접 입력 / 수정</button>
+    <div class="editor" id="editor">
+      <label for="manualTime">출근 시간 선택</label>
+      <input id="manualTime" type="time" step="1">
+      <div class="actions">
+        <button class="secondary" id="cancelEdit">취소</button>
+        <button id="saveEdit">시간 저장</button>
+      </div>
+    </div>
+  </section>
+  <p class="note">출근 버튼을 누르면 현재 시각이 저장됩니다. 직접 입력하거나 기록된 시간을 수정할 수도 있습니다. 날짜가 바뀌면 전날 기록은 자동으로 삭제됩니다. 기록은 이 기기의 브라우저에만 저장됩니다.</p>
+  <div class="foot">개인용 근태 기록 · 이 기기에서만 사용</div>
+</main>
+<script>
+(() => {
+  const KEY = "personal-attendance-v1";
+  const $ = id => document.getElementById(id);
+  let record = null;
+  function dayKey(d = new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+  function loadForToday() {
+    const today = dayKey();
+    try {
+      const saved = JSON.parse(localStorage.getItem(KEY) || "null");
+      if (saved && saved.date === today && Number.isFinite(saved.clockIn)) record = saved;
+      else { record = null; localStorage.removeItem(KEY); }
+    } catch { record = null; localStorage.removeItem(KEY); }
+  }
+  function fmtTime(d) {
+    return [d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,"0")).join(":");
+  }
+  function fmtDuration(ms) {
+    const sec = Math.max(0,Math.floor(ms/1000));
+    const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+    return [h,m,s].map(n=>String(n).padStart(2,"0")).join(":");
+  }
+  function toInputTime(d) {
+    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
+  }
+  function render() {
+    const now = new Date();
+    if (record && record.date !== dayKey(now)) { localStorage.removeItem(KEY); record = null; }
+    $("dateLabel").textContent = new Intl.DateTimeFormat("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(now);
+    $("now").textContent = fmtTime(now);
+    if (record) {
+      $("timer").textContent = fmtDuration(now.getTime()-record.clockIn);
+      $("clockIn").textContent = fmtTime(new Date(record.clockIn));
+      $("status").innerHTML = '<span class="dot"></span> 근무 중';
+      $("clockButton").textContent = "현재 시간으로 다시 기록";
+    } else {
+      $("timer").textContent = "00:00:00";
+      $("clockIn").textContent = "--:--:--";
+      $("status").textContent = "출근 전";
+      $("clockButton").textContent = "현재 시간으로 출근 기록";
+    }
+  }
+  function saveTimestamp(timestamp) {
+    record = {date:dayKey(),clockIn:timestamp};
+    localStorage.setItem(KEY,JSON.stringify(record));
+    render();
+  }
+  $("clockButton").addEventListener("click", () => saveTimestamp(Date.now()));
+  $("editToggle").addEventListener("click", () => {
+    const editor = $("editor");
+    if (!editor.classList.contains("open")) {
+      $("manualTime").value = record ? toInputTime(new Date(record.clockIn)) : toInputTime(new Date());
+      editor.classList.add("open");
+    } else editor.classList.remove("open");
+  });
+  $("cancelEdit").addEventListener("click", () => $("editor").classList.remove("open"));
+  $("saveEdit").addEventListener("click", () => {
+    const value = $("manualTime").value;
+    if (!value) { alert("출근 시간을 선택해 주세요."); return; }
+    const [h,m,s="0"] = value.split(":").map(Number);
+    const now = new Date();
+    const timestamp = new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,m,s,0).getTime();
+    if (timestamp > Date.now()) {
+      if (!confirm("현재 시각보다 늦은 시간입니다. 이 시간으로 저장할까요?")) return;
+    }
+    saveTimestamp(timestamp);
+    $("editor").classList.remove("open");
+  });
+  loadForToday();
+  render();
+  setInterval(render,250);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadForToday(); render(); } });
+  window.addEventListener("pageshow", () => { loadForToday(); render(); });
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+  }
+})();
+</script>
+</body>
+</html>
