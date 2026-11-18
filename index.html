@@ -238,7 +238,7 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
       $("status").textContent="출근 전";
       $("clockInButton").disabled=false;
       $("clockOutButton").disabled=true;
-      $("editOutToggle").disabled=true;
+      $("editOutToggle").disabled=false;
     }
     $("weekTotal").textContent=fmtDuration(weeklyMilliseconds(now));
   }
@@ -258,7 +258,7 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
     if (record.clockOut) {
       alert("이미 퇴근 처리했습니다."); return;
     }
-    if (confirm("현재 시각으로 퇴근 처리할까요?")) saveClockOut(Date.now());
+    saveClockOut(Date.now());
   });
   $("editInToggle").addEventListener("click",()=>{
     const panel=$("editInPanel");
@@ -268,9 +268,13 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
     } else panel.classList.remove("open");
   });
   $("editOutToggle").addEventListener("click",()=>{
+    if (!record) {
+      alert("퇴근 시간을 기록하려면 먼저 출근 버튼을 눌러주세요.");
+      return;
+    }
     const panel=$("editOutPanel");
     if (!panel.classList.contains("open")) {
-      fillInputs("out",record?.clockOut ?? Date.now());
+      fillInputs("out",record.clockOut ?? Date.now());
       panel.classList.add("open");
     } else panel.classList.remove("open");
   });
@@ -289,10 +293,18 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
     $("editInPanel").classList.remove("open");
   });
   $("saveOut").addEventListener("click",()=>{
-    if(!record)return;
-    const ts=getInputTimestamp("out");if(ts===null)return;
+    if(!record) {
+      alert("먼저 출근 기록을 해주세요.");
+      return;
+    }
+    const ts=getInputTimestamp("out");
+    if(ts===null)return;
+    if(ts<record.clockIn) {
+      alert("퇴근 시간은 출근 시간보다 늦어야 합니다.");
+      return;
+    }
     saveClockOut(ts);
-    if(record.clockOut!==null)$("editOutPanel").classList.remove("open");
+    $("editOutPanel").classList.remove("open");
   });
   loadWeek(); loadRecord(); render();
   setInterval(render,250);
