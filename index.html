@@ -139,8 +139,14 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
   function loadRecord() {
     try {
       const saved=JSON.parse(localStorage.getItem(KEY)||"null");
-      record=saved && Number.isFinite(saved.clockIn) ? saved : null;
-    } catch { record=null; }
+      const todayKey=dayKey();
+      // Accept only a well-formed record for today. Invalid/stale records cannot
+      // leave the app internally "working" while the screen says "not started".
+      record=saved && saved.date===todayKey && Number.isFinite(saved.clockIn)
+        ? {date:todayKey, clockIn:saved.clockIn, clockOut:Number.isFinite(saved.clockOut)?saved.clockOut:null}
+        : null;
+      if (!record) localStorage.removeItem(KEY);
+    } catch { record=null; localStorage.removeItem(KEY); }
     const today=dayKey();
     if (record && record.date!==today) {
       // A still-open shift is automatically closed at midnight of its recorded day.
@@ -256,9 +262,21 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
     $("weekTotal").textContent=fmtDuration(weeklyMilliseconds(now));
   }
   $("clockInButton").addEventListener("click",()=>{
+    // The visible "출근 전" state is authoritative if stale in-memory state disagrees.
+    const shownClockIn=$("clockIn").textContent.trim();
+    const shownStatus=$("status").textContent.trim();
+    if (shownClockIn==="--:--:--" || shownStatus==="출근 전") {
+      record=null;
+      localStorage.removeItem(KEY);
+    }
     if (record && !record.clockOut) {
-      alert("이미 근무 중입니다. 현재 출근 시간이 표시되어야 합니다.");
-      render();
+      // Keep the already saved clock-in time; refresh the display from the saved value.
+      $("clockIn").textContent=fmtTime(new Date(record.clockIn));
+      $("clockOut").textContent="근무 중";
+      $("status").innerHTML='<span class="dot"></span> 근무 중';
+      $("timer").textContent=fmtDuration(Date.now()-record.clockIn);
+      $("clockInButton").disabled=true;
+      $("clockOutButton").disabled=false;
       return;
     }
     if (record && record.clockOut) {
@@ -266,6 +284,12 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
       return;
     }
     saveClockIn(Date.now());
+    // Explicitly paint the two time fields even if a later render step fails.
+    $("clockIn").textContent=fmtTime(new Date(record.clockIn));
+    $("clockOut").textContent="근무 중";
+    $("status").innerHTML='<span class="dot"></span> 근무 중';
+    $("clockInButton").disabled=true;
+    $("clockOutButton").disabled=false;
   });
   $("clockOutButton").addEventListener("click",()=>{
     if (!record) {
@@ -277,6 +301,11 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
       return;
     }
     saveClockOut(Date.now());
+    if (record && Number.isFinite(record.clockOut)) {
+      $("clockOut").textContent=fmtTime(new Date(record.clockOut));
+      $("status").textContent="퇴근 완료";
+      $("clockOutButton").disabled=true;
+    }
   });
   $("editInToggle").addEventListener("click",()=>{
     const panel=$("editInPanel");
