@@ -175,7 +175,6 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
     $("dateLabel").textContent = new Intl.DateTimeFormat("ko-KR", {
       year: "numeric", month: "long", day: "numeric", weekday: "long"
     }).format(now);
-    $("now").textContent = timeText(now.getTime());
 
     const monday = mondayDate(now);
     const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
