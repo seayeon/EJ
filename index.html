@@ -49,8 +49,8 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
       <button type="button" id="clockOutButton">퇴근</button>
     </div>
     <div class="actions">
-      <button class="secondary" id="editInToggle">출근 시간 수정</button>
-      <button class="secondary" id="editOutToggle">퇴근 시간 수정</button>
+      <button type="button" class="secondary" id="editInToggle">출근 시간 수정</button>
+      <button type="button" class="secondary" id="editOutToggle">퇴근 시간 수정</button>
     </div>
     <div class="editor" id="editInPanel">
       <label>출근 시간 (시·분·초)</label>
@@ -60,7 +60,7 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
         <div><label for="inSecond">초</label><input id="inSecond" type="number" min="0" max="59" inputmode="numeric" placeholder="00"></div>
       </div>
       <div class="actions">
-        <button class="secondary" id="cancelIn">취소</button>
+        <button type="button" class="secondary" id="cancelIn">취소</button>
         <button type="button" id="saveIn">출근 시간 저장</button>
       </div>
     </div>
@@ -72,7 +72,7 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
         <div><label for="outSecond">초</label><input id="outSecond" type="number" min="0" max="59" inputmode="numeric" placeholder="00"></div>
       </div>
       <div class="actions">
-        <button class="secondary" id="cancelOut">취소</button>
+        <button type="button" class="secondary" id="cancelOut">취소</button>
         <button type="button" id="saveOut">퇴근 시간 저장</button>
       </div>
     </div>
@@ -81,284 +81,258 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
   <div class="foot">개인용 근태 기록 · 이 기기에서만 사용</div>
 </main>
 <script>
-(() => {
-  const KEY = "personal-attendance-v1";
+(function () {
+  "use strict";
+  const CURRENT_KEY = "attendance-current-v2";
   const WEEK_KEY = "personal-attendance-week-v1";
-  const $ = id => document.getElementById(id);
-  let record = null;
-  let weekRecords = {};
+  const $ = (id) => document.getElementById(id);
+  let current = null;
+  let weekData = {};
 
-  function dayKey(d = new Date()) {
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  function dateKey(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   }
-  function dateFromKey(key) {
-    const [y,m,d] = key.split("-").map(Number);
-    return new Date(y,m-1,d,0,0,0,0);
+  function todayKey() { return dateKey(new Date()); }
+  function mondayDate(date) {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
   }
-  function mondayOf(d = new Date()) {
-    const x = new Date(d.getFullYear(),d.getMonth(),d.getDate());
-    x.setDate(x.getDate() - ((x.getDay()+6)%7));
-    return x;
+  function thisWeekKey() { return dateKey(mondayDate(new Date())); }
+  function timeText(timestamp) {
+    const d = new Date(timestamp);
+    return [d.getHours(), d.getMinutes(), d.getSeconds()]
+      .map(v => String(v).padStart(2, "0")).join(":");
   }
-  function weekKey(d = new Date()) { return dayKey(mondayOf(d)); }
+  function durationText(ms) {
+    const n = Math.max(0, Math.floor(ms / 1000));
+    return [Math.floor(n / 3600), Math.floor(n % 3600 / 60), n % 60]
+      .map(v => String(v).padStart(2, "0")).join(":");
+  }
+  function readJSON(key) {
+    try { return JSON.parse(localStorage.getItem(key) || "null"); }
+    catch (_) { return null; }
+  }
+  function saveCurrent() {
+    if (current) localStorage.setItem(CURRENT_KEY, JSON.stringify(current));
+    else localStorage.removeItem(CURRENT_KEY);
+  }
   function saveWeek() {
-    localStorage.setItem(WEEK_KEY,JSON.stringify({week:weekKey(),days:weekRecords}));
+    localStorage.setItem(WEEK_KEY, JSON.stringify({ week: thisWeekKey(), days: weekData }));
   }
-  function loadWeek() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(WEEK_KEY)||"null");
-      if (saved && saved.week===weekKey() && saved.days && typeof saved.days==="object") {
-        weekRecords=saved.days;
-      } else {
-        weekRecords={};
-        localStorage.setItem(WEEK_KEY,JSON.stringify({week:weekKey(),days:weekRecords}));
-      }
-    } catch {
-      weekRecords={};
-      localStorage.setItem(WEEK_KEY,JSON.stringify({week:weekKey(),days:weekRecords}));
+  function loadData() {
+    const savedWeek = readJSON(WEEK_KEY);
+    if (savedWeek && savedWeek.week === thisWeekKey() && savedWeek.days && typeof savedWeek.days === "object") {
+      weekData = savedWeek.days;
+    } else {
+      weekData = {};
+      saveWeek();
     }
-    // Migrate older weekly entries (clock-in timestamp only) to a completed day ending at midnight.
-    for (const [key,value] of Object.entries(weekRecords)) {
-      if (typeof value==="number") {
-        const start=value, dayStart=dateFromKey(key).getTime();
-        weekRecords[key]={clockIn:start,clockOut:dayStart+24*60*60*1000};
-      }
-    }
-    saveWeek();
-  }
-  function storeRecord() {
-    try {
-      if (record) localStorage.setItem(KEY,JSON.stringify(record));
-      else localStorage.removeItem(KEY);
-      return true;
-    } catch (err) {
-      alert("기록을 기기에 저장하지 못했습니다. Safari의 사이트 데이터 설정을 확인해 주세요.");
-      return false;
-    }
-  }
-  function loadRecord() {
-    try {
-      const saved=JSON.parse(localStorage.getItem(KEY)||"null");
-      const todayKey=dayKey();
-      // Accept only a well-formed record for today. Invalid/stale records cannot
-      // leave the app internally "working" while the screen says "not started".
-      record=saved && saved.date===todayKey && Number.isFinite(saved.clockIn)
-        ? {date:todayKey, clockIn:saved.clockIn, clockOut:Number.isFinite(saved.clockOut)?saved.clockOut:null}
-        : null;
-      if (!record) localStorage.removeItem(KEY);
-    } catch { record=null; localStorage.removeItem(KEY); }
-    const today=dayKey();
-    if (record && record.date!==today) {
-      // A still-open shift is automatically closed at midnight of its recorded day.
-      const oldDayStart=dateFromKey(record.date).getTime();
-      const midnight=oldDayStart+24*60*60*1000;
-      const oldWeek=weekKey(dateFromKey(record.date));
-      if (oldWeek===weekKey()) {
-        weekRecords[record.date]={clockIn:record.clockIn,clockOut:record.clockOut ?? midnight};
+
+    const saved = readJSON(CURRENT_KEY);
+    current = saved && saved.date === todayKey() &&
+      Number.isFinite(saved.clockIn) &&
+      (saved.clockOut === null || Number.isFinite(saved.clockOut))
+      ? saved : null;
+
+    // If a shift was left open overnight, close it at midnight of its recorded day.
+    if (!current && saved && saved.date && Number.isFinite(saved.clockIn)) {
+      const oldDate = new Date(saved.date + "T00:00:00");
+      const midnight = new Date(oldDate.getFullYear(), oldDate.getMonth(), oldDate.getDate() + 1).getTime();
+      const oldWeekStart = dateKey(mondayDate(oldDate));
+      if (oldWeekStart === thisWeekKey()) {
+        weekData[saved.date] = { clockIn: saved.clockIn, clockOut: Number.isFinite(saved.clockOut) ? saved.clockOut : midnight };
         saveWeek();
       }
-      record=null;
-      storeRecord();
+      localStorage.removeItem(CURRENT_KEY);
     }
-    if (record) {
-      weekRecords[today]={clockIn:record.clockIn,clockOut:record.clockOut ?? null};
+    if (current) {
+      weekData[current.date] = { clockIn: current.clockIn, clockOut: current.clockOut };
       saveWeek();
     }
   }
-  function fmtTime(d) {
-    return [d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,"0")).join(":");
-  }
-  function fmtDuration(ms) {
-    const sec=Math.max(0,Math.floor(ms/1000));
-    const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
-    return [h,m,s].map(n=>String(n).padStart(2,"0")).join(":");
-  }
-  function durationForDay(key,entry,now) {
-    const start=dateFromKey(key).getTime();
-    const inTime=typeof entry==="number"?entry:entry.clockIn;
-    if (!Number.isFinite(inTime)) return 0;
-    let outTime=typeof entry==="number" ? start+86400000 : entry.clockOut;
-    if (!Number.isFinite(outTime)) outTime=Math.min(now.getTime(),start+86400000);
-    return Math.max(0,outTime-inTime);
-  }
-  function weeklyMilliseconds(now) {
-    const start=mondayOf(now).getTime();
-    const end=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1).getTime();
-    let total=0;
-    for (const [key,entry] of Object.entries(weekRecords)) {
-      const dayStart=dateFromKey(key).getTime();
-      if (dayStart<start || dayStart>=end) continue;
-      total+=durationForDay(key,entry,now);
-    }
+  function weeklyTotal(now) {
+    let total = 0;
+    const start = mondayDate(now).getTime();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    Object.keys(weekData).forEach(key => {
+      const d = new Date(key + "T00:00:00");
+      const dayStart = d.getTime();
+      if (dayStart < start || dayStart >= tomorrow) return;
+      const item = weekData[key];
+      if (!item || !Number.isFinite(item.clockIn)) return;
+      const cap = Math.min(now.getTime(), dayStart + 86400000);
+      const out = Number.isFinite(item.clockOut) ? item.clockOut : cap;
+      total += Math.max(0, Math.min(out, cap) - item.clockIn);
+    });
     return total;
   }
-  function saveClockIn(timestamp) {
-    const today=dayKey();
-    record={date:today,clockIn:timestamp,clockOut:null};
-    weekRecords[today]={clockIn:timestamp,clockOut:null};
-    render(); // Update the visible clock-in time immediately.
-    storeRecord();
-    try { saveWeek(); } catch(e) {}
-  }
-  function saveClockOut(timestamp) {
-    if (!record) {
-      alert("먼저 출근 기록을 해주세요.");
-      return;
-    }
-    if (timestamp<record.clockIn) {
-      alert("퇴근 시간은 출근 시간보다 늦어야 합니다."); return;
-    }
-    record.clockOut=timestamp;
-    weekRecords[record.date]={clockIn:record.clockIn,clockOut:timestamp};
-    render(); // Update the visible clock-out time immediately.
-    storeRecord();
-    try { saveWeek(); } catch(e) {}
-  }
-  function getInputTimestamp(prefix) {
-    const h=Number($(prefix+"Hour").value),m=Number($(prefix+"Minute").value),s=Number($(prefix+"Second").value);
-    if ([h,m,s].some((v,i)=>$(prefix+["Hour","Minute","Second"][i]).value==="") ||
-       !Number.isInteger(h)||!Number.isInteger(m)||!Number.isInteger(s)||h<0||h>23||m<0||m>59||s<0||s>59) {
-      alert("시(0~23), 분(0~59), 초(0~59)를 올바르게 입력해 주세요."); return null;
-    }
-    const n=new Date(),ts=new Date(n.getFullYear(),n.getMonth(),n.getDate(),h,m,s,0).getTime();
-    if (ts>Date.now() && !confirm("현재 시각보다 늦은 시간입니다. 이 시간으로 저장할까요?")) return null;
-    return ts;
-  }
-  function fillInputs(prefix,ts) {
-    const d=new Date(ts);
-    $(prefix+"Hour").value=String(d.getHours()).padStart(2,"0");
-    $(prefix+"Minute").value=String(d.getMinutes()).padStart(2,"0");
-    $(prefix+"Second").value=String(d.getSeconds()).padStart(2,"0");
-  }
   function render() {
-    const now=new Date(),today=dayKey(now);
-    if (record && record.date!==today) loadRecord();
-    if (JSON.parse(localStorage.getItem(WEEK_KEY)||"null")?.week!==weekKey(now)) {
-      weekRecords={}; saveWeek();
-    }
-    $("dateLabel").textContent=new Intl.DateTimeFormat("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(now);
-    $("now").textContent=fmtTime(now);
-    const monday=mondayOf(now),sunday=new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+6);
-    const rf=d=>`${d.getMonth()+1}.${d.getDate()}`;
-    $("weekRange").textContent=`${rf(monday)} ~ ${rf(sunday)} 기준`;
-    if (record) {
-      const end=record.clockOut ?? now.getTime();
-      $("timer").textContent=fmtDuration(end-record.clockIn);
-      $("clockIn").textContent=fmtTime(new Date(record.clockIn));
-      $("clockOut").textContent=record.clockOut?fmtTime(new Date(record.clockOut)):"근무 중";
-      $("status").innerHTML=record.clockOut? "퇴근 완료" : '<span class="dot"></span> 근무 중';
-      $("clockInButton").disabled=true;
-      $("clockOutButton").disabled=!!record.clockOut;
-      $("editOutToggle").disabled=false;
+    const now = new Date();
+    $("dateLabel").textContent = new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric", month: "long", day: "numeric", weekday: "long"
+    }).format(now);
+    $("now").textContent = timeText(now.getTime());
+
+    const monday = mondayDate(now);
+    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+    const shortDate = d => `${d.getMonth() + 1}.${d.getDate()}`;
+    $("weekRange").textContent = `${shortDate(monday)} ~ ${shortDate(sunday)} 기준`;
+
+    if (current) {
+      const end = Number.isFinite(current.clockOut) ? current.clockOut : now.getTime();
+      $("timer").textContent = durationText(end - current.clockIn);
+      $("clockIn").textContent = timeText(current.clockIn);
+      $("clockOut").textContent = Number.isFinite(current.clockOut) ? timeText(current.clockOut) : "근무 중";
+      $("status").textContent = Number.isFinite(current.clockOut) ? "퇴근 완료" : "근무 중";
     } else {
-      $("timer").textContent="00:00:00";
-      $("clockIn").textContent="--:--:--";
-      $("clockOut").textContent="--:--:--";
-      $("status").textContent="출근 전";
-      $("clockInButton").disabled=false;
-      $("clockOutButton").disabled=true;
-      $("editOutToggle").disabled=false;
+      $("timer").textContent = "00:00:00";
+      $("clockIn").textContent = "--:--:--";
+      $("clockOut").textContent = "--:--:--";
+      $("status").textContent = "출근 전";
     }
-    $("weekTotal").textContent=fmtDuration(weeklyMilliseconds(now));
+    $("weekTotal").textContent = durationText(weeklyTotal(now));
   }
-  $("clockInButton").addEventListener("click",()=>{
-    // The visible "출근 전" state is authoritative if stale in-memory state disagrees.
-    const shownClockIn=$("clockIn").textContent.trim();
-    const shownStatus=$("status").textContent.trim();
-    if (shownClockIn==="--:--:--" || shownStatus==="출근 전") {
-      record=null;
-      localStorage.removeItem(KEY);
-    }
-    if (record && !record.clockOut) {
-      // Keep the already saved clock-in time; refresh the display from the saved value.
-      $("clockIn").textContent=fmtTime(new Date(record.clockIn));
-      $("clockOut").textContent="근무 중";
-      $("status").innerHTML='<span class="dot"></span> 근무 중';
-      $("timer").textContent=fmtDuration(Date.now()-record.clockIn);
-      $("clockInButton").disabled=true;
-      $("clockOutButton").disabled=false;
-      return;
-    }
-    if (record && record.clockOut) {
-      alert("오늘은 이미 퇴근 처리했습니다.");
-      return;
-    }
-    saveClockIn(Date.now());
-    // Explicitly paint the two time fields even if a later render step fails.
-    $("clockIn").textContent=fmtTime(new Date(record.clockIn));
-    $("clockOut").textContent="근무 중";
-    $("status").innerHTML='<span class="dot"></span> 근무 중';
-    $("clockInButton").disabled=true;
-    $("clockOutButton").disabled=false;
-  });
-  $("clockOutButton").addEventListener("click",()=>{
-    if (!record) {
+  function startShift(timestamp) {
+    current = { date: todayKey(), clockIn: timestamp, clockOut: null };
+    weekData[current.date] = { clockIn: timestamp, clockOut: null };
+    saveCurrent();
+    saveWeek();
+    render();
+  }
+  function finishShift(timestamp) {
+    if (!current) {
       alert("먼저 출근 버튼을 눌러주세요.");
       return;
     }
-    if (record.clockOut) {
-      alert("이미 퇴근 처리했습니다.");
-      return;
-    }
-    saveClockOut(Date.now());
-    if (record && Number.isFinite(record.clockOut)) {
-      $("clockOut").textContent=fmtTime(new Date(record.clockOut));
-      $("status").textContent="퇴근 완료";
-      $("clockOutButton").disabled=true;
-    }
-  });
-  $("editInToggle").addEventListener("click",()=>{
-    const panel=$("editInPanel");
-    if (!panel.classList.contains("open")) {
-      fillInputs("in",record?record.clockIn:Date.now());
-      panel.classList.add("open");
-    } else panel.classList.remove("open");
-  });
-  $("editOutToggle").addEventListener("click",()=>{
-    if (!record) {
-      alert("퇴근 시간을 기록하려면 먼저 출근 버튼을 눌러주세요.");
-      return;
-    }
-    const panel=$("editOutPanel");
-    if (!panel.classList.contains("open")) {
-      fillInputs("out",record.clockOut ?? Date.now());
-      panel.classList.add("open");
-    } else panel.classList.remove("open");
-  });
-  $("cancelIn").addEventListener("click",()=>$("editInPanel").classList.remove("open"));
-  $("cancelOut").addEventListener("click",()=>$("editOutPanel").classList.remove("open"));
-  $("saveIn").addEventListener("click",()=>{
-    const ts=getInputTimestamp("in"); if(ts===null)return;
-    if(record && record.clockOut!==null && ts>record.clockOut){alert("출근 시간은 퇴근 시간보다 빨라야 합니다.");return;}
-    if (record) {
-      record.clockIn=ts;
-      weekRecords[record.date]={clockIn:ts,clockOut:record.clockOut ?? null};
-      storeRecord(); saveWeek(); render();
-    } else {
-      saveClockIn(ts);
-    }
-    $("editInPanel").classList.remove("open");
-  });
-  $("saveOut").addEventListener("click",()=>{
-    if(!record) {
-      alert("먼저 출근 기록을 해주세요.");
-      return;
-    }
-    const ts=getInputTimestamp("out");
-    if(ts===null)return;
-    if(ts<record.clockIn) {
+    if (timestamp < current.clockIn) {
       alert("퇴근 시간은 출근 시간보다 늦어야 합니다.");
       return;
     }
-    saveClockOut(ts);
+    current.clockOut = timestamp;
+    weekData[current.date] = { clockIn: current.clockIn, clockOut: timestamp };
+    saveCurrent();
+    saveWeek();
+    render();
+  }
+  function readTimeInputs(prefix) {
+    const ids = [prefix + "Hour", prefix + "Minute", prefix + "Second"];
+    const values = ids.map(id => $(id).value.trim());
+    const nums = values.map(Number);
+    if (values.some(v => v === "") ||
+        !Number.isInteger(nums[0]) || nums[0] < 0 || nums[0] > 23 ||
+        !Number.isInteger(nums[1]) || nums[1] < 0 || nums[1] > 59 ||
+        !Number.isInteger(nums[2]) || nums[2] < 0 || nums[2] > 59) {
+      alert("시(0~23), 분(0~59), 초(0~59)를 올바르게 입력해 주세요.");
+      return null;
+    }
+    const now = new Date();
+    const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+      nums[0], nums[1], nums[2]).getTime();
+    if (ts > Date.now() && !confirm("현재 시각보다 늦은 시간입니다. 저장할까요?")) return null;
+    return ts;
+  }
+  function fillTimeInputs(prefix, timestamp) {
+    const d = new Date(timestamp);
+    $(prefix + "Hour").value = String(d.getHours()).padStart(2, "0");
+    $(prefix + "Minute").value = String(d.getMinutes()).padStart(2, "0");
+    $(prefix + "Second").value = String(d.getSeconds()).padStart(2, "0");
+  }
+
+  // Event listeners are installed after all page elements have been parsed.
+  $("clockInButton").addEventListener("click", function () {
+    if (current && !Number.isFinite(current.clockOut)) {
+      alert("이미 근무 중입니다. 출근 시간은 위에 표시되어 있습니다.");
+      render();
+      return;
+    }
+    if (current && Number.isFinite(current.clockOut)) {
+      alert("오늘은 이미 퇴근 처리했습니다.");
+      return;
+    }
+    startShift(Date.now());
+  });
+  $("clockOutButton").addEventListener("click", function () {
+    if (!current) {
+      alert("먼저 출근 버튼을 눌러주세요.");
+      return;
+    }
+    if (Number.isFinite(current.clockOut)) {
+      alert("이미 퇴근 처리했습니다.");
+      return;
+    }
+    finishShift(Date.now());
+  });
+
+  $("editInToggle").addEventListener("click", function () {
+    const panel = $("editInPanel");
+    if (!panel.classList.contains("open")) {
+      fillTimeInputs("in", current ? current.clockIn : Date.now());
+      panel.classList.add("open");
+    } else panel.classList.remove("open");
+  });
+  $("editOutToggle").addEventListener("click", function () {
+    if (!current) {
+      alert("먼저 출근 버튼을 눌러주세요.");
+      return;
+    }
+    const panel = $("editOutPanel");
+    if (!panel.classList.contains("open")) {
+      fillTimeInputs("out", Number.isFinite(current.clockOut) ? current.clockOut : Date.now());
+      panel.classList.add("open");
+    } else panel.classList.remove("open");
+  });
+  $("cancelIn").addEventListener("click", () => $("editInPanel").classList.remove("open"));
+  $("cancelOut").addEventListener("click", () => $("editOutPanel").classList.remove("open"));
+  $("saveIn").addEventListener("click", function () {
+    const ts = readTimeInputs("in");
+    if (ts === null) return;
+    if (current && Number.isFinite(current.clockOut) && ts > current.clockOut) {
+      alert("출근 시간은 퇴근 시간보다 빨라야 합니다.");
+      return;
+    }
+    if (!current) startShift(ts);
+    else {
+      current.clockIn = ts;
+      weekData[current.date] = { clockIn: ts, clockOut: current.clockOut };
+      saveCurrent(); saveWeek(); render();
+    }
+    $("editInPanel").classList.remove("open");
+  });
+  $("saveOut").addEventListener("click", function () {
+    if (!current) {
+      alert("먼저 출근 버튼을 눌러주세요.");
+      return;
+    }
+    const ts = readTimeInputs("out");
+    if (ts === null) return;
+    finishShift(ts);
     $("editOutPanel").classList.remove("open");
   });
-  loadWeek(); loadRecord(); render();
-  setInterval(render,250);
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden){loadWeek();loadRecord();render();}});
-  window.addEventListener("pageshow",()=>{loadWeek();loadRecord();render();});
-  if("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+
+  try {
+    loadData();
+    render();
+    setInterval(render, 1000);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) { loadData(); render(); }
+    });
+    window.addEventListener("pageshow", function () { loadData(); render(); });
+  } catch (error) {
+    $("status").textContent = "앱 오류: 새로고침해 주세요";
+    console.error("Attendance app error:", error);
+    alert("앱 초기화 중 오류가 발생했습니다. 페이지를 새로고침해 주세요.");
+  }
+
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function (e) {
+        console.error("Service worker registration failed:", e);
+      });
+    });
   }
 })();
 </script>
