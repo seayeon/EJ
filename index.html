@@ -48,6 +48,11 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
       <button type="button" id="clockInButton">출근</button>
       <button type="button" id="clockOutButton">퇴근</button>
     </div>
+    <div class="detail" style="margin-top:12px">
+      <div class="label">수정할 날짜 선택 (이번 주)</div>
+      <select id="editDate" style="width:100%;padding:14px;border-radius:12px;border:1px solid #40506a;background:#18243a;color:#fff;font:600 16px -apple-system,BlinkMacSystemFont,sans-serif"></select>
+      <div class="sub" id="selectedDateHint" style="margin-top:8px">선택한 날짜의 출퇴근 시간을 수정할 수 있습니다.</div>
+    </div>
     <div class="actions">
       <button type="button" class="secondary" id="editInToggle">출근 시간 수정</button>
       <button type="button" class="secondary" id="editOutToggle">퇴근 시간 수정</button>
@@ -77,7 +82,7 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
       </div>
     </div>
   </section>
-  <p class="note">출근 버튼으로 측정을 시작하고 퇴근 버튼으로 종료합니다. 퇴근 시간도 직접 입력하거나 수정할 수 있습니다. 자정까지 퇴근 기록이 없으면 자정에 자동 종료되며, 주간 누적은 월요일에 초기화됩니다. 기록은 이 기기의 브라우저에만 저장됩니다.</p>
+  <p class="note">출근 버튼으로 측정을 시작하고 퇴근 버튼으로 종료합니다. 퇴근 시간도 직접 입력하거나 수정할 수 있습니다. 자정까지 퇴근 기록이 없으면 자정에 자동 종료되며, 날짜를 선택해 이번 주 출퇴근 기록을 수정할 수 있습니다. 주간 누적은 월요일에 초기화됩니다. 기록은 이 기기의 브라우저에만 저장됩니다.</p>
   <div class="foot">개인용 근태 기록 · 이 기기에서만 사용</div>
 </main>
 <script>
@@ -85,253 +90,233 @@ input[type=number]{width:100%;padding:14px 8px;border-radius:12px;border:1px sol
   "use strict";
   const CURRENT_KEY = "attendance-current-v2";
   const WEEK_KEY = "personal-attendance-week-v1";
-  const $ = (id) => document.getElementById(id);
+  const $ = id => document.getElementById(id);
   let current = null;
   let weekData = {};
+  let selectedDate = todayKey();
 
-  function dateKey(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+  function dateKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   }
-  function todayKey() { return dateKey(new Date()); }
-  function mondayDate(date) {
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-    return d;
+  function todayKey(){ return dateKey(new Date()); }
+  function fromKey(key){ return new Date(key+"T00:00:00"); }
+  function mondayDate(d){
+    const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    x.setDate(x.getDate()-((x.getDay()+6)%7));
+    return x;
   }
-  function thisWeekKey() { return dateKey(mondayDate(new Date())); }
-  function timeText(timestamp) {
-    const d = new Date(timestamp);
-    return [d.getHours(), d.getMinutes(), d.getSeconds()]
-      .map(v => String(v).padStart(2, "0")).join(":");
+  function weekKey(){return dateKey(mondayDate(new Date()));}
+  function timeText(ts){
+    const d=new Date(ts);
+    return [d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,"0")).join(":");
   }
-  function durationText(ms) {
-    const n = Math.max(0, Math.floor(ms / 1000));
-    return [Math.floor(n / 3600), Math.floor(n % 3600 / 60), n % 60]
-      .map(v => String(v).padStart(2, "0")).join(":");
+  function durationText(ms){
+    const n=Math.max(0,Math.floor(ms/1000));
+    return [Math.floor(n/3600),Math.floor(n%3600/60),n%60].map(v=>String(v).padStart(2,"0")).join(":");
   }
-  function readJSON(key) {
-    try { return JSON.parse(localStorage.getItem(key) || "null"); }
-    catch (_) { return null; }
-  }
-  function saveCurrent() {
-    if (current) localStorage.setItem(CURRENT_KEY, JSON.stringify(current));
+  function readJSON(key){try{return JSON.parse(localStorage.getItem(key)||"null");}catch(_){return null;}}
+  function saveCurrent(){
+    if(current)localStorage.setItem(CURRENT_KEY,JSON.stringify(current));
     else localStorage.removeItem(CURRENT_KEY);
   }
-  function saveWeek() {
-    localStorage.setItem(WEEK_KEY, JSON.stringify({ week: thisWeekKey(), days: weekData }));
-  }
-  function loadData() {
-    const savedWeek = readJSON(WEEK_KEY);
-    if (savedWeek && savedWeek.week === thisWeekKey() && savedWeek.days && typeof savedWeek.days === "object") {
-      weekData = savedWeek.days;
-    } else {
-      weekData = {};
-      saveWeek();
+  function saveWeek(){localStorage.setItem(WEEK_KEY,JSON.stringify({week:weekKey(),days:weekData}));}
+  function normalizeEntry(entry,key){
+    if(typeof entry==="number"){
+      const start=fromKey(key).getTime();
+      return {clockIn:entry,clockOut:start+86400000};
     }
+    if(entry && Number.isFinite(entry.clockIn)){
+      return {clockIn:entry.clockIn,clockOut:Number.isFinite(entry.clockOut)?entry.clockOut:null};
+    }
+    return null;
+  }
+  function loadData(){
+    const savedWeek=readJSON(WEEK_KEY);
+    if(savedWeek && savedWeek.week===weekKey() && savedWeek.days && typeof savedWeek.days==="object"){
+      weekData={};
+      Object.keys(savedWeek.days).forEach(k=>{
+        const entry=normalizeEntry(savedWeek.days[k],k);
+        if(entry)weekData[k]=entry;
+      });
+    } else weekData={};
 
-    const saved = readJSON(CURRENT_KEY);
-    current = saved && saved.date === todayKey() &&
-      Number.isFinite(saved.clockIn) &&
-      (saved.clockOut === null || Number.isFinite(saved.clockOut))
-      ? saved : null;
+    const saved=readJSON(CURRENT_KEY);
+    current=saved && saved.date===todayKey() && Number.isFinite(saved.clockIn)
+      ? {date:saved.date,clockIn:saved.clockIn,clockOut:Number.isFinite(saved.clockOut)?saved.clockOut:null}
+      : null;
 
-    // If a shift was left open overnight, close it at midnight of its recorded day.
-    if (!current && saved && saved.date && Number.isFinite(saved.clockIn)) {
-      const oldDate = new Date(saved.date + "T00:00:00");
-      const midnight = new Date(oldDate.getFullYear(), oldDate.getMonth(), oldDate.getDate() + 1).getTime();
-      const oldWeekStart = dateKey(mondayDate(oldDate));
-      if (oldWeekStart === thisWeekKey()) {
-        weekData[saved.date] = { clockIn: saved.clockIn, clockOut: Number.isFinite(saved.clockOut) ? saved.clockOut : midnight };
-        saveWeek();
+    // Close an unfinished shift from an earlier day at midnight.
+    if(saved && saved.date && saved.date!==todayKey() && Number.isFinite(saved.clockIn)){
+      const midnight=fromKey(saved.date).getTime()+86400000;
+      const oldWeek=dateKey(mondayDate(fromKey(saved.date)));
+      if(oldWeek===weekKey()){
+        weekData[saved.date]={clockIn:saved.clockIn,clockOut:Number.isFinite(saved.clockOut)?saved.clockOut:midnight};
       }
       localStorage.removeItem(CURRENT_KEY);
     }
-    if (current) {
-      weekData[current.date] = { clockIn: current.clockIn, clockOut: current.clockOut };
-      saveWeek();
-    }
+    if(current)weekData[current.date]={clockIn:current.clockIn,clockOut:current.clockOut};
+    saveWeek();
   }
-  function weeklyTotal(now) {
-    let total = 0;
-    const start = mondayDate(now).getTime();
-    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
-    Object.keys(weekData).forEach(key => {
-      const d = new Date(key + "T00:00:00");
-      const dayStart = d.getTime();
-      if (dayStart < start || dayStart >= tomorrow) return;
-      const item = weekData[key];
-      if (!item || !Number.isFinite(item.clockIn)) return;
-      const cap = Math.min(now.getTime(), dayStart + 86400000);
-      const out = Number.isFinite(item.clockOut) ? item.clockOut : cap;
-      total += Math.max(0, Math.min(out, cap) - item.clockIn);
+  function fillDateOptions(){
+    const select=$("editDate");
+    select.innerHTML="";
+    const monday=mondayDate(new Date());
+    const labels=["월요일","화요일","수요일","목요일","금요일","토요일","일요일"];
+    for(let i=0;i<5;i++){
+      const d=new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+i);
+      const key=dateKey(d),opt=document.createElement("option");
+      opt.value=key;
+      opt.textContent=`${labels[i]} (${d.getMonth()+1}/${d.getDate()})${key===todayKey()?" · 오늘":""}`;
+      select.appendChild(opt);
+    }
+    if([...select.options].some(o=>o.value===selectedDate))select.value=selectedDate;
+    else {selectedDate=todayKey();select.value=selectedDate;}
+  }
+  function selectedEntry(){return weekData[selectedDate]||null;}
+  function totalForEntry(key,entry,now){
+    if(!entry)return 0;
+    const dayStart=fromKey(key).getTime();
+    const cap=Math.min(now.getTime(),dayStart+86400000);
+    const out=Number.isFinite(entry.clockOut)?entry.clockOut:cap;
+    return Math.max(0,Math.min(out,cap)-entry.clockIn);
+  }
+  function weeklyTotal(now){
+    const start=mondayDate(now).getTime();
+    const tomorrow=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1).getTime();
+    let total=0;
+    Object.keys(weekData).forEach(key=>{
+      const t=fromKey(key).getTime();
+      if(t>=start && t<tomorrow)total+=totalForEntry(key,weekData[key],now);
     });
     return total;
   }
-  function render() {
-    const now = new Date();
-    $("dateLabel").textContent = new Intl.DateTimeFormat("ko-KR", {
-      year: "numeric", month: "long", day: "numeric", weekday: "long"
-    }).format(now);
-
-    const monday = mondayDate(now);
-    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
-    const shortDate = d => `${d.getMonth() + 1}.${d.getDate()}`;
-    $("weekRange").textContent = `${shortDate(monday)} ~ ${shortDate(sunday)} 기준`;
-
-    if (current) {
-      const end = Number.isFinite(current.clockOut) ? current.clockOut : now.getTime();
-      $("timer").textContent = durationText(end - current.clockIn);
-      $("clockIn").textContent = timeText(current.clockIn);
-      $("clockOut").textContent = Number.isFinite(current.clockOut) ? timeText(current.clockOut) : "근무 중";
-      $("status").textContent = Number.isFinite(current.clockOut) ? "퇴근 완료" : "근무 중";
-    } else {
-      $("timer").textContent = "00:00:00";
-      $("clockIn").textContent = "--:--:--";
-      $("clockOut").textContent = "--:--:--";
-      $("status").textContent = "출근 전";
+  function render(){
+    const now=new Date();
+    $("dateLabel").textContent=new Intl.DateTimeFormat("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"}).format(now);
+    const monday=mondayDate(now),sunday=new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+6);
+    const short=d=>`${d.getMonth()+1}.${d.getDate()}`;
+    $("weekRange").textContent=`${short(monday)} ~ ${short(sunday)} 기준`;
+    const entry=selectedEntry();
+    const isToday=selectedDate===todayKey();
+    const titleDate=new Intl.DateTimeFormat("ko-KR",{month:"long",day:"numeric",weekday:"long"}).format(fromKey(selectedDate));
+    $("selectedDateHint").textContent=`${titleDate} 기록을 수정합니다.`;
+    $("timer").textContent=entry?durationText(totalForEntry(selectedDate,entry,now)):"00:00:00";
+    $("clockIn").textContent=entry?timeText(entry.clockIn):"--:--:--";
+    $("clockOut").textContent=entry&&Number.isFinite(entry.clockOut)?timeText(entry.clockOut):(entry?"근무 중":"--:--:--");
+    $("status").textContent=entry?(Number.isFinite(entry.clockOut)?"퇴근 완료":"근무 중"):"출근 전";
+    $("weekTotal").textContent=durationText(weeklyTotal(now));
+    $("clockInButton").disabled=!isToday || !!(current && current.clockOut===null) || !!(current && current.clockOut!==null);
+    $("clockOutButton").disabled=!isToday || !current || Number.isFinite(current.clockOut);
+    if(!isToday){
+      $("clockInButton").disabled=true;
+      $("clockOutButton").disabled=true;
     }
-    $("weekTotal").textContent = durationText(weeklyTotal(now));
   }
-  function startShift(timestamp) {
-    current = { date: todayKey(), clockIn: timestamp, clockOut: null };
-    weekData[current.date] = { clockIn: timestamp, clockOut: null };
-    saveCurrent();
-    saveWeek();
+  function startShift(ts){
+    current={date:todayKey(),clockIn:ts,clockOut:null};
+    weekData[current.date]={clockIn:ts,clockOut:null};
+    saveCurrent();saveWeek();render();
+  }
+  function finishShift(ts){
+    if(!current){alert("먼저 출근 버튼을 눌러주세요.");return;}
+    if(ts<current.clockIn){alert("퇴근 시간은 출근 시간보다 늦어야 합니다.");return;}
+    current.clockOut=ts;
+    weekData[current.date]={clockIn:current.clockIn,clockOut:ts};
+    saveCurrent();saveWeek();render();
+  }
+  function readTimeInputs(prefix,key){
+    const ids=[prefix+"Hour",prefix+"Minute",prefix+"Second"];
+    const vals=ids.map(id=>$(id).value.trim()),n=vals.map(Number);
+    if(vals.some(v=>v==="")||!Number.isInteger(n[0])||n[0]<0||n[0]>23||
+      !Number.isInteger(n[1])||n[1]<0||n[1]>59||!Number.isInteger(n[2])||n[2]<0||n[2]>59){
+      alert("시(0~23), 분(0~59), 초(0~59)를 올바르게 입력해 주세요.");return null;
+    }
+    const d=fromKey(key);
+    return new Date(d.getFullYear(),d.getMonth(),d.getDate(),n[0],n[1],n[2]).getTime();
+  }
+  function fillInputs(prefix,ts){
+    const d=new Date(ts);
+    $(prefix+"Hour").value=String(d.getHours()).padStart(2,"0");
+    $(prefix+"Minute").value=String(d.getMinutes()).padStart(2,"0");
+    $(prefix+"Second").value=String(d.getSeconds()).padStart(2,"0");
+  }
+  function ensureSelectedEntry(){
+    let entry=selectedEntry();
+    if(!entry){alert("선택한 날짜의 출근 기록이 없습니다. 출근 시간을 입력해 새 기록을 만들 수 있습니다.");}
+    return entry;
+  }
+
+  $("editDate").addEventListener("change",()=>{
+    selectedDate=$("editDate").value;
+    $("editInPanel").classList.remove("open");
+    $("editOutPanel").classList.remove("open");
     render();
-  }
-  function finishShift(timestamp) {
-    if (!current) {
-      alert("먼저 출근 버튼을 눌러주세요.");
-      return;
-    }
-    if (timestamp < current.clockIn) {
-      alert("퇴근 시간은 출근 시간보다 늦어야 합니다.");
-      return;
-    }
-    current.clockOut = timestamp;
-    weekData[current.date] = { clockIn: current.clockIn, clockOut: timestamp };
-    saveCurrent();
-    saveWeek();
-    render();
-  }
-  function readTimeInputs(prefix) {
-    const ids = [prefix + "Hour", prefix + "Minute", prefix + "Second"];
-    const values = ids.map(id => $(id).value.trim());
-    const nums = values.map(Number);
-    if (values.some(v => v === "") ||
-        !Number.isInteger(nums[0]) || nums[0] < 0 || nums[0] > 23 ||
-        !Number.isInteger(nums[1]) || nums[1] < 0 || nums[1] > 59 ||
-        !Number.isInteger(nums[2]) || nums[2] < 0 || nums[2] > 59) {
-      alert("시(0~23), 분(0~59), 초(0~59)를 올바르게 입력해 주세요.");
-      return null;
-    }
-    const now = new Date();
-    const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
-      nums[0], nums[1], nums[2]).getTime();
-    if (ts > Date.now() && !confirm("현재 시각보다 늦은 시간입니다. 저장할까요?")) return null;
-    return ts;
-  }
-  function fillTimeInputs(prefix, timestamp) {
-    const d = new Date(timestamp);
-    $(prefix + "Hour").value = String(d.getHours()).padStart(2, "0");
-    $(prefix + "Minute").value = String(d.getMinutes()).padStart(2, "0");
-    $(prefix + "Second").value = String(d.getSeconds()).padStart(2, "0");
-  }
-
-  // Event listeners are installed after all page elements have been parsed.
-  $("clockInButton").addEventListener("click", function () {
-    if (current && !Number.isFinite(current.clockOut)) {
-      alert("이미 근무 중입니다. 출근 시간은 위에 표시되어 있습니다.");
-      render();
-      return;
-    }
-    if (current && Number.isFinite(current.clockOut)) {
-      alert("오늘은 이미 퇴근 처리했습니다.");
-      return;
-    }
+  });
+  $("clockInButton").addEventListener("click",()=>{
+    if(current){alert(current.clockOut===null?"이미 근무 중입니다.":"오늘은 이미 퇴근 처리했습니다.");return;}
     startShift(Date.now());
   });
-  $("clockOutButton").addEventListener("click", function () {
-    if (!current) {
-      alert("먼저 출근 버튼을 눌러주세요.");
-      return;
-    }
-    if (Number.isFinite(current.clockOut)) {
-      alert("이미 퇴근 처리했습니다.");
-      return;
-    }
+  $("clockOutButton").addEventListener("click",()=>{
+    if(!current){alert("먼저 출근 버튼을 눌러주세요.");return;}
+    if(current.clockOut!==null){alert("이미 퇴근 처리했습니다.");return;}
     finishShift(Date.now());
   });
-
-  $("editInToggle").addEventListener("click", function () {
-    const panel = $("editInPanel");
-    if (!panel.classList.contains("open")) {
-      fillTimeInputs("in", current ? current.clockIn : Date.now());
+  $("editInToggle").addEventListener("click",()=>{
+    const panel=$("editInPanel");
+    if(!panel.classList.contains("open")){
+      const entry=selectedEntry();
+      fillInputs("in",entry?entry.clockIn:Date.now());
       panel.classList.add("open");
-    } else panel.classList.remove("open");
+    }else panel.classList.remove("open");
   });
-  $("editOutToggle").addEventListener("click", function () {
-    if (!current) {
-      alert("먼저 출근 버튼을 눌러주세요.");
-      return;
-    }
-    const panel = $("editOutPanel");
-    if (!panel.classList.contains("open")) {
-      fillTimeInputs("out", Number.isFinite(current.clockOut) ? current.clockOut : Date.now());
+  $("editOutToggle").addEventListener("click",()=>{
+    const entry=ensureSelectedEntry();if(!entry)return;
+    const panel=$("editOutPanel");
+    if(!panel.classList.contains("open")){
+      fillInputs("out",Number.isFinite(entry.clockOut)?entry.clockOut:Date.now());
       panel.classList.add("open");
-    } else panel.classList.remove("open");
+    }else panel.classList.remove("open");
   });
-  $("cancelIn").addEventListener("click", () => $("editInPanel").classList.remove("open"));
-  $("cancelOut").addEventListener("click", () => $("editOutPanel").classList.remove("open"));
-  $("saveIn").addEventListener("click", function () {
-    const ts = readTimeInputs("in");
-    if (ts === null) return;
-    if (current && Number.isFinite(current.clockOut) && ts > current.clockOut) {
-      alert("출근 시간은 퇴근 시간보다 빨라야 합니다.");
-      return;
+  $("cancelIn").addEventListener("click",()=>$("editInPanel").classList.remove("open"));
+  $("cancelOut").addEventListener("click",()=>$("editOutPanel").classList.remove("open"));
+  $("saveIn").addEventListener("click",()=>{
+    const ts=readTimeInputs("in",selectedDate);if(ts===null)return;
+    const entry=selectedEntry();
+    if(entry && Number.isFinite(entry.clockOut) && ts>entry.clockOut){alert("출근 시간은 퇴근 시간보다 빨라야 합니다.");return;}
+    const next={clockIn:ts,clockOut:entry?entry.clockOut:null};
+    weekData[selectedDate]=next;
+    if(selectedDate===todayKey()){
+      current={date:selectedDate,clockIn:ts,clockOut:next.clockOut};
+      saveCurrent();
     }
-    if (!current) startShift(ts);
-    else {
-      current.clockIn = ts;
-      weekData[current.date] = { clockIn: ts, clockOut: current.clockOut };
-      saveCurrent(); saveWeek(); render();
-    }
-    $("editInPanel").classList.remove("open");
+    saveWeek();$("editInPanel").classList.remove("open");render();
   });
-  $("saveOut").addEventListener("click", function () {
-    if (!current) {
-      alert("먼저 출근 버튼을 눌러주세요.");
-      return;
+  $("saveOut").addEventListener("click",()=>{
+    const entry=ensureSelectedEntry();if(!entry)return;
+    const ts=readTimeInputs("out",selectedDate);if(ts===null)return;
+    if(ts<entry.clockIn){alert("퇴근 시간은 출근 시간보다 늦어야 합니다.");return;}
+    weekData[selectedDate]={clockIn:entry.clockIn,clockOut:ts};
+    if(selectedDate===todayKey() && current){
+      current.clockOut=ts;saveCurrent();
     }
-    const ts = readTimeInputs("out");
-    if (ts === null) return;
-    finishShift(ts);
-    $("editOutPanel").classList.remove("open");
+    saveWeek();$("editOutPanel").classList.remove("open");render();
   });
 
-  try {
+  try{
     loadData();
+    selectedDate=todayKey();
+    fillDateOptions();
     render();
-    setInterval(render, 1000);
-    document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) { loadData(); render(); }
-    });
-    window.addEventListener("pageshow", function () { loadData(); render(); });
-  } catch (error) {
-    $("status").textContent = "앱 오류: 새로고침해 주세요";
-    console.error("Attendance app error:", error);
+    setInterval(render,1000);
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden){loadData();fillDateOptions();render();}});
+    window.addEventListener("pageshow",()=>{loadData();fillDateOptions();render();});
+  }catch(error){
+    console.error("Attendance app initialization error:",error);
+    $("status").textContent="앱 오류: 새로고침해 주세요";
     alert("앱 초기화 중 오류가 발생했습니다. 페이지를 새로고침해 주세요.");
   }
-
-  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.register("./sw.js").catch(function (e) {
-        console.error("Service worker registration failed:", e);
-      });
-    });
+  if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+    window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(e=>console.error(e)));
   }
 })();
 </script>
